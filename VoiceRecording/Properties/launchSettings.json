@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "VoiceRecording (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "VoiceRecording (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
