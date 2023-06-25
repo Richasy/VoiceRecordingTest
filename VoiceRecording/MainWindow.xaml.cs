@@ -1,11 +1,8 @@
 using Microsoft.UI.Xaml;
-using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Windows.Foundation;
@@ -95,7 +92,7 @@ namespace VoiceRecording
 
         private void ShowMessage(string msg)
         {
-            ResultBox.Text += msg + "\n";
+            // ResultBox.Text += msg + "\n";
         }
 
         private void CreateFrameInputNode()
@@ -202,7 +199,7 @@ namespace VoiceRecording
 
         private async void OnRecordButtonClickAsync(object sender, RoutedEventArgs e)
         {
-            if (RecordButton.IsChecked ?? false)
+            if (false)
             {
                 // 开始录制.
                 ShowMessage("开始录制");
@@ -232,7 +229,7 @@ namespace VoiceRecording
 
         private async void OnInitializeButtonClickAsync(object sender, RoutedEventArgs e)
         {
-            ResultBox.Text = string.Empty;
+            // ResultBox.Text = string.Empty;
             InitializeAudioRecording();
             ShowMessage("NAudio initialized");
             await InitializeAudioGraphAsync();
