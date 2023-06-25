@@ -60,9 +60,9 @@ namespace CaptureEncoder
         {
             D3D11.D3D11CreateDevice(
                 null,
-                useWARP ? DriverType.Software : DriverType.Hardware,
+                useWARP ? DriverType.Warp : DriverType.Hardware,
                 DeviceCreationFlags.BgraSupport,
-                new[] { FeatureLevel.Level_11_0, FeatureLevel.Level_11_1 },
+                new[] { FeatureLevel.Level_11_0, FeatureLevel.Level_11_1, FeatureLevel.Level_12_0 },
                 out var d3dDevice);
             IDirect3DDevice device = null;
 
