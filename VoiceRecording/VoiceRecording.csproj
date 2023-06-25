@@ -31,7 +31,7 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.755" />
     <PackageReference Include="NAudio" Version="2.1.0" />
     <PackageReference Include="NAudio.Wasapi" Version="2.1.0" />
-    <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
+    <PackageReference Include="Vortice.Direct3D11" Version="3.2.0" />
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>
 

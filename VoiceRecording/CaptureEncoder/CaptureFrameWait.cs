@@ -4,6 +4,8 @@
 using System;
 using System.Diagnostics;
 using System.Threading;
+using Vortice.Direct3D11;
+using Vortice.DXGI;
 using Windows.Foundation.Metadata;
 using Windows.Graphics;
 using Windows.Graphics.Capture;
@@ -26,7 +28,7 @@ namespace CaptureEncoder
 
     class MultithreadLock : IDisposable
     {
-        public MultithreadLock(SharpDX.Direct3D11.Multithread multithread)
+        public MultithreadLock(ID3D11Multithread multithread)
         {
             _multithread = multithread;
             _multithread?.Enter();
@@ -38,7 +40,7 @@ namespace CaptureEncoder
             _multithread = null;
         }
 
-        private SharpDX.Direct3D11.Multithread _multithread;
+        private ID3D11Multithread _multithread;
     }
 
     public sealed class CaptureFrameWait : IDisposable
@@ -50,7 +52,7 @@ namespace CaptureEncoder
         {
             _device = device;
             _d3dDevice = Direct3D11Helpers.CreateSharpDXDevice(device);
-            _multithread = _d3dDevice.QueryInterface<SharpDX.Direct3D11.Multithread>();
+            _multithread = _d3dDevice.QueryInterface<ID3D11Multithread>();
             _multithread.SetMultithreadProtected(true);
             _item = item;
             _frameEvent = new ManualResetEvent(false);
@@ -64,7 +66,7 @@ namespace CaptureEncoder
         private void InitializeCapture(SizeInt32 size)
         {
             _item.Closed += OnClosed;
-            _framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
+            _framePool = Direct3D11CaptureFramePool.Create(
                 _device,
                 DirectXPixelFormat.B8G8R8A8UIntNormalized,
                 1,
@@ -76,28 +78,29 @@ namespace CaptureEncoder
 
         private void InitializeBlankTexture(SizeInt32 size)
         {
-            var description = new SharpDX.Direct3D11.Texture2DDescription
+            var description = new Texture2DDescription
             {
                 Width = size.Width,
                 Height = size.Height,
                 MipLevels = 1,
                 ArraySize = 1,
-                Format = SharpDX.DXGI.Format.B8G8R8A8_UNorm,
-                SampleDescription = new SharpDX.DXGI.SampleDescription()
+                Format = Format.B8G8R8A8_UNorm,
+                SampleDescription = new SampleDescription()
                 {
                     Count = 1,
                     Quality = 0
                 },
-                Usage = SharpDX.Direct3D11.ResourceUsage.Default,
-                BindFlags = SharpDX.Direct3D11.BindFlags.ShaderResource | SharpDX.Direct3D11.BindFlags.RenderTarget,
-                CpuAccessFlags = SharpDX.Direct3D11.CpuAccessFlags.None,
-                OptionFlags = SharpDX.Direct3D11.ResourceOptionFlags.None
+                Usage = ResourceUsage.Default,
+                BindFlags = BindFlags.ShaderResource | BindFlags.RenderTarget,
+                CPUAccessFlags = CpuAccessFlags.None,
+                MiscFlags = ResourceOptionFlags.None
             };
-            _blankTexture = new SharpDX.Direct3D11.Texture2D(_d3dDevice, description);
 
-            using (var renderTargetView = new SharpDX.Direct3D11.RenderTargetView(_d3dDevice, _blankTexture))
+            _blankTexture = _d3dDevice.CreateTexture2D(description);
+
+            using (var renderTargetView = _d3dDevice.CreateRenderTargetView(_blankTexture))
             {
-                _d3dDevice.ImmediateContext.ClearRenderTargetView(renderTargetView, new SharpDX.Mathematics.Interop.RawColor4(0, 0, 0, 1));
+                _d3dDevice.ImmediateContext.ClearRenderTargetView(renderTargetView, new Vortice.Mathematics.Color4(0, 0, 0, 1));
             }
         }
 
@@ -157,20 +160,20 @@ namespace CaptureEncoder
             using (var sourceTexture = Direct3D11Helpers.CreateSharpDXTexture2D(_currentFrame.Surface))
             {
                 var description = sourceTexture.Description;
-                description.Usage = SharpDX.Direct3D11.ResourceUsage.Default;
-                description.BindFlags = SharpDX.Direct3D11.BindFlags.ShaderResource | SharpDX.Direct3D11.BindFlags.RenderTarget;
-                description.CpuAccessFlags = SharpDX.Direct3D11.CpuAccessFlags.None;
-                description.OptionFlags = SharpDX.Direct3D11.ResourceOptionFlags.None;
+                description.Usage = ResourceUsage.Default;
+                description.BindFlags = BindFlags.ShaderResource | BindFlags.RenderTarget;
+                description.CPUAccessFlags = CpuAccessFlags.None;
+                description.MiscFlags = ResourceOptionFlags.None;
 
-                using (var copyTexture = new SharpDX.Direct3D11.Texture2D(_d3dDevice, description))
+                using (var copyTexture = _d3dDevice.CreateTexture2D(description))
                 {
                     var width = Math.Clamp(_currentFrame.ContentSize.Width, 0, _currentFrame.Surface.Description.Width);
                     var height = Math.Clamp(_currentFrame.ContentSize.Height, 0, _currentFrame.Surface.Description.Height);
 
-                    var region = new SharpDX.Direct3D11.ResourceRegion(0, 0, 0, width, height, 1);
+                    var region = new Vortice.Mathematics.Box(0, 0, 0, width, height, 1);
 
                     _d3dDevice.ImmediateContext.CopyResource(_blankTexture, copyTexture);
-                    _d3dDevice.ImmediateContext.CopySubresourceRegion(sourceTexture, 0, region, copyTexture, 0);
+                    _d3dDevice.ImmediateContext.CopySubresourceRegion(copyTexture, 0, 0, 0, 0, sourceTexture, 0, region);
                     result.Surface = Direct3D11Helpers.CreateDirect3DSurfaceFromSharpDXTexture(copyTexture);
                 }
             }
@@ -185,9 +188,9 @@ namespace CaptureEncoder
         }
 
         private IDirect3DDevice _device;
-        private SharpDX.Direct3D11.Device _d3dDevice;
-        private SharpDX.Direct3D11.Multithread _multithread;
-        private SharpDX.Direct3D11.Texture2D _blankTexture;
+        private ID3D11Device _d3dDevice;
+        private ID3D11Multithread _multithread;
+        private ID3D11Texture2D _blankTexture;
 
         private ManualResetEvent[] _events;
         private ManualResetEvent _frameEvent;

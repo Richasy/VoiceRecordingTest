@@ -27,6 +27,11 @@ public sealed partial class RecordControl : UserControl
     public RecordControl()
     {
         this.InitializeComponent();
+        Loaded += OnLoaded;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
         if (!GraphicsCaptureSession.IsSupported())
         {
             IsEnabled = false;
