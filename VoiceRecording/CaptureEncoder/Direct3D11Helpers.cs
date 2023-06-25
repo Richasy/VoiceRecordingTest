@@ -9,6 +9,7 @@ using Vortice.Direct3D11;
 using Vortice.DXGI;
 using Windows.Graphics.DirectX;
 using Windows.Graphics.DirectX.Direct3D11;
+using WinRT;
 using WinRT.Interop;
 
 namespace CaptureEncoder
@@ -92,8 +93,7 @@ namespace CaptureEncoder
 
                 if (hr == 0)
                 {
-                    surface = Marshal.GetObjectForIUnknown(pUnknown) as IDirect3DSurface;
-                    Marshal.Release(pUnknown);
+                    surface = WinRT.MarshalInterface<IDirect3DSurface>.FromAbi(pUnknown);
                 }
             }
 
@@ -102,7 +102,7 @@ namespace CaptureEncoder
 
         internal static ID3D11Device CreateSharpDXDevice(IDirect3DDevice device)
         {
-            var access = (IDirect3DDxgiInterfaceAccess)device;
+            var access = device.As<IDirect3DDxgiInterfaceAccess>();
             var d3dPointer = access.GetInterface(ID3D11Device);
             var d3dDevice = new ID3D11Device(d3dPointer);
             return d3dDevice;
@@ -110,7 +110,7 @@ namespace CaptureEncoder
 
         internal static ID3D11Texture2D CreateSharpDXTexture2D(IDirect3DSurface surface)
         {
-            var access = (IDirect3DDxgiInterfaceAccess)surface;
+            var access = surface.As<IDirect3DDxgiInterfaceAccess>();
             var d3dPointer = access.GetInterface(ID3D11Texture2D);
             var d3dSurface = new ID3D11Texture2D(d3dPointer);
             return d3dSurface;

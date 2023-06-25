@@ -11,6 +11,7 @@ using Windows.Media.Core;
 using Windows.Media.MediaProperties;
 using Windows.Media.Transcoding;
 using Windows.Storage.Streams;
+using WinRT.Interop;
 
 namespace CaptureEncoder
 {
