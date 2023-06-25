@@ -184,13 +184,15 @@ public sealed partial class RecordControl : UserControl
         picker.DefaultFileExtension = ".mp4";
         picker.FileTypeChoices.Add("MP4 Video", new List<string> { ".mp4" });
 
+        var hwnd = WindowNative.GetWindowHandle(App._window);
+        InitializeWithWindow.Initialize(picker, hwnd);
         var file = await picker.PickSaveFileAsync();
         return file;
     }
 
     private async Task<StorageFile> GetTempFileAsync()
     {
-        var folder = ApplicationData.Current.TemporaryFolder;
+        var folder = ApplicationData.Current.LocalFolder;
         var name = DateTime.Now.ToString("yyyyMMdd-HHmm-ss");
         var file = await folder.CreateFileAsync($"{name}.mp4");
         return file;
