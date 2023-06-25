@@ -5,6 +5,7 @@ using System;
 using System.Runtime.InteropServices;
 using Windows.Graphics.DirectX;
 using Windows.Graphics.DirectX.Direct3D11;
+using WinRT;
 
 namespace CaptureEncoder
 {
@@ -65,8 +66,7 @@ namespace CaptureEncoder
 
                 if (hr == 0)
                 {
-                    device = Marshal.GetObjectForIUnknown(pUnknown) as IDirect3DDevice;
-                    Marshal.Release(pUnknown);
+                    device = WinRT.MarshalInterface<IDirect3DDevice>.FromAbi(pUnknown);
                 }
             }
 
@@ -95,7 +95,7 @@ namespace CaptureEncoder
 
         internal static SharpDX.Direct3D11.Device CreateSharpDXDevice(IDirect3DDevice device)
         {
-            var access = (IDirect3DDxgiInterfaceAccess)device;
+            var access = device.As<IDirect3DDxgiInterfaceAccess>();
             var d3dPointer = access.GetInterface(ID3D11Device);
             var d3dDevice = new SharpDX.Direct3D11.Device(d3dPointer);
             return d3dDevice;
@@ -103,7 +103,7 @@ namespace CaptureEncoder
 
         internal static SharpDX.Direct3D11.Texture2D CreateSharpDXTexture2D(IDirect3DSurface surface)
         {
-            var access = (IDirect3DDxgiInterfaceAccess)surface;
+            var access = surface.As<IDirect3DDxgiInterfaceAccess>();
             var d3dPointer = access.GetInterface(ID3D11Texture2D);
             var d3dSurface = new SharpDX.Direct3D11.Texture2D(d3dPointer);
             return d3dSurface;
