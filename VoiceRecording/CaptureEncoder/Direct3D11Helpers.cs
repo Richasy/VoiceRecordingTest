@@ -85,8 +85,7 @@ namespace CaptureEncoder
 
                 if (hr == 0)
                 {
-                    surface = Marshal.GetObjectForIUnknown(pUnknown) as IDirect3DSurface;
-                    Marshal.Release(pUnknown);
+                    surface = WinRT.MarshalInterface<IDirect3DSurface>.FromAbi(pUnknown);
                 }
             }
 

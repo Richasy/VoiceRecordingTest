@@ -4,10 +4,12 @@
 using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
+using VoiceRecording.CaptureEncoder;
 using Windows.Foundation;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX.Direct3D11;
 using Windows.Media.Core;
+using Windows.Media.Editing;
 using Windows.Media.MediaProperties;
 using Windows.Media.Transcoding;
 using Windows.Storage.Streams;
@@ -21,6 +23,7 @@ namespace CaptureEncoder
             _device = device;
             _captureItem = item;
             _isRecording = false;
+            _audioCapture = new AudioCapture();
 
             CreateMediaObjects();
         }
@@ -53,7 +56,10 @@ namespace CaptureEncoder
                     encodingProfile.Video.FrameRate.Denominator = 1;
                     encodingProfile.Video.PixelAspectRatio.Numerator = 1;
                     encodingProfile.Video.PixelAspectRatio.Denominator = 1;
+                    encodingProfile.SetAudioTracks(new[] { new AudioStreamDescriptor(AudioEncodingProperties.CreatePcm(44100, 2, 16)) });
+
                     var transcode = await _transcoder.PrepareMediaStreamSourceTranscodeAsync(_mediaStreamSource, stream, encodingProfile);
+                    await _audioCapture.InitializeAsync();
 
                     await transcode.TranscodeAsync();
                 }
@@ -73,11 +79,12 @@ namespace CaptureEncoder
                 DisposeInternal();
             }
 
-            _isRecording = false;            
+            _isRecording = false;
         }
 
         private void DisposeInternal()
         {
+            _audioCapture.Stop();
             _frameGenerator.Dispose();
         }
 
@@ -89,17 +96,25 @@ namespace CaptureEncoder
 
             // Describe our input: uncompressed BGRA8 buffers
             var videoProperties = VideoEncodingProperties.CreateUncompressed(MediaEncodingSubtypes.Bgra8, (uint)width, (uint)height);
+            var audioProperties = AudioEncodingProperties.CreatePcm(44100, 2, 16);
             _videoDescriptor = new VideoStreamDescriptor(videoProperties);
+            _audioDescriptor = new AudioStreamDescriptor(audioProperties);
 
             // Create our MediaStreamSource
-            _mediaStreamSource = new MediaStreamSource(_videoDescriptor);
+            _mediaStreamSource = new MediaStreamSource(_videoDescriptor, _audioDescriptor);
             _mediaStreamSource.BufferTime = TimeSpan.FromSeconds(0);
             _mediaStreamSource.Starting += OnMediaStreamSourceStarting;
+            _mediaStreamSource.SwitchStreamsRequested += OnMediaStreamSourceSwitchStreamsRequested;
             _mediaStreamSource.SampleRequested += OnMediaStreamSourceSampleRequested;
 
             // Create our transcoder
             _transcoder = new MediaTranscoder();
             _transcoder.HardwareAccelerationEnabled = true;
+        }
+
+        private void OnMediaStreamSourceSwitchStreamsRequested(MediaStreamSource sender, MediaStreamSourceSwitchStreamsRequestedEventArgs args)
+        {
+            _isVideoStreaming = args.Request.NewStreamDescriptor is VideoStreamDescriptor;
         }
 
         private void OnMediaStreamSourceSampleRequested(MediaStreamSource sender, MediaStreamSourceSampleRequestedEventArgs args)
@@ -108,19 +123,42 @@ namespace CaptureEncoder
             {
                 try
                 {
-                    using (var frame = _frameGenerator.WaitForNewFrame())
+                    if (_isVideoStreaming)
                     {
+                        var frame = _audioCapture.GetAudioFrame();
                         if (frame == null)
                         {
                             args.Request.Sample = null;
-                            DisposeInternal();
                             return;
                         }
 
-                        var timeStamp = frame.SystemRelativeTime;
+                        var timeStamp = frame.SystemRelativeTime.Value;
+                        var buffer = _audioCapture.ConvertFrameToBuffer(frame);
+                        if (buffer == null)
+                        {
+                            return;
+                        }
 
-                        var sample = MediaStreamSample.CreateFromDirect3D11Surface(frame.Surface, timeStamp);
-                        args.Request.Sample = sample;                       
+                        var sample = MediaStreamSample.CreateFromBuffer(buffer, timeStamp);
+                        args.Request.Sample = sample;
+                        return;
+                    }
+                    else
+                    {
+                        using (var frame = _frameGenerator.WaitForNewFrame())
+                        {
+                            if (frame == null)
+                            {
+                                args.Request.Sample = null;
+                                DisposeInternal();
+                                return;
+                            }
+
+                            var timeStamp = frame.SystemRelativeTime;
+
+                            var sample = MediaStreamSample.CreateFromDirect3D11Surface(frame.Surface, timeStamp);
+                            args.Request.Sample = sample;
+                        }
                     }
                 }
                 catch (Exception e)
@@ -144,6 +182,7 @@ namespace CaptureEncoder
             using (var frame = _frameGenerator.WaitForNewFrame())
             {
                 args.Request.SetActualStartPosition(frame.SystemRelativeTime);
+                _audioCapture.Start();
             }
         }
 
@@ -151,11 +190,14 @@ namespace CaptureEncoder
 
         private GraphicsCaptureItem _captureItem;
         private CaptureFrameWait _frameGenerator;
+        private AudioCapture _audioCapture;
 
         private VideoStreamDescriptor _videoDescriptor;
+        private AudioStreamDescriptor _audioDescriptor;
         private MediaStreamSource _mediaStreamSource;
         private MediaTranscoder _transcoder;
         private bool _isRecording;
+        private bool _isVideoStreaming;
         private bool _closed = false;
     }
 }
