@@ -68,6 +68,7 @@ namespace CaptureEncoder
                     var transcode = await _transcoder.PrepareMediaStreamSourceTranscodeAsync(_mediaStreamSource, stream, encodingProfile);
                     if (transcode.CanTranscode)
                     {
+                        _audioCapture?.Start();
                         await transcode.TranscodeAsync();
                     }
                 }
@@ -104,7 +105,6 @@ namespace CaptureEncoder
 
             // Create our MediaStreamSource
             _mediaStreamSource = new MediaStreamSource(_videoDescriptor);
-            _mediaStreamSource.CanSeek = true;
             _mediaStreamSource.BufferTime = TimeSpan.Zero;
             _mediaStreamSource.Starting += OnMediaStreamSourceStarting;
             _mediaStreamSource.SampleRequested += OnMediaStreamSourceSampleRequested;
@@ -190,7 +190,6 @@ namespace CaptureEncoder
 
                 if (_audioCapture != null)
                 {
-                    _audioCapture?.Start();
                     using var frame = _audioCapture.GetAudioFrame();
                     _timeOffset += frame.RelativeTime.GetValueOrDefault();
                 }
