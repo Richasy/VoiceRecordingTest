@@ -1,5 +1,4 @@
-﻿using Microsoft.UI.Xaml;
-using NAudio.Wave;
+﻿using NAudio.Wave;
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -8,19 +7,20 @@ using Windows.Foundation;
 using Windows.Media.Audio;
 using Windows.Media.MediaProperties;
 using Windows.Media;
-using Windows.Storage;
 using System.Diagnostics;
 using WinRT;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Storage.Streams;
+using Windows.Storage;
 
 namespace VoiceRecording.CaptureEncoder;
 
-internal class AudioCapture
+internal class AudioCapture : IDisposable
 {
     private WasapiLoopbackCapture _wasapiLoopbackCapture;
     private AudioGraph _audioGraph;
-    private AudioFrameInputNode _frameInputNode;
+    private AudioFrameInputNode _loopbackInputNode;
+    private AudioFileInputNode _audioFileInputNode;
     private AudioDeviceInputNode _deviceInputNode;
     private AudioFrameOutputNode _frameOutputNode;
     private Stream _loopingAudioStream;
@@ -28,6 +28,7 @@ internal class AudioCapture
     private double _readPosition = 0;
     private Stopwatch _stopwatch = new Stopwatch();
     private int _frameCount = 0;
+    private bool disposedValue;
 
     public async Task InitializeAsync()
     {
@@ -42,10 +43,11 @@ internal class AudioCapture
         // 开始录制.
         ShowMessage("开始录制");
         _audioGraph.Start();
-        _frameInputNode.Start();
+        _audioFileInputNode.Start();
+        _loopbackInputNode?.Start();
         _frameOutputNode.Start();
         _stopwatch.Start();
-        _wasapiLoopbackCapture.StartRecording();
+        _wasapiLoopbackCapture?.StartRecording();
     }
 
     public void Stop()
@@ -54,11 +56,15 @@ internal class AudioCapture
         ShowMessage("录制结束");
         var duration = _stopwatch.Elapsed.TotalSeconds;
         ShowMessage($"总计音频帧数：{_frameCount}\n用时：{duration:0.0}s\n频率：{_frameCount / duration}");
-        ShowMessage($"当前指针：{_readPosition}\n流的长度：{_loopingAudioStream.Length}");
-        _stopwatch.Stop();
-        _wasapiLoopbackCapture.StopRecording();
-        _audioGraph.Stop();
+        _audioFileInputNode?.Stop();
+        _loopbackInputNode?.Stop();
+        _frameOutputNode?.Stop();
+        _audioGraph?.Stop();
+        // ShowMessage($"当前指针：{_readPosition}\n流的长度：{_loopingAudioStream.Length}");
     }
+
+    public AudioEncodingProperties GetEncodingProeprties()
+        => _audioGraph.EncodingProperties;
 
     public AudioFrame GetAudioFrame()
     {
@@ -101,6 +107,7 @@ internal class AudioCapture
         _audioGraph = result.Graph;
         CreateFrameOutputNode();
         await CreateDeviceInputNodeAsync();
+        await CreateFileInputNodeAsync();
         CreateFrameInputNode();
 
         if (_frameOutputNode == null || _deviceInputNode == null)
@@ -111,8 +118,9 @@ internal class AudioCapture
 
         var subNode = _audioGraph.CreateSubmixNode();
         _deviceInputNode.AddOutgoingConnection(subNode);
-        _frameInputNode.AddOutgoingConnection(subNode);
-        // subNode.AddOutgoingConnection(_frameOutputNode);
+        _loopbackInputNode.AddOutgoingConnection(subNode);
+        _audioFileInputNode.AddOutgoingConnection(subNode);
+        subNode.AddOutgoingConnection(_frameOutputNode);
     }
 
     private void InitializeAudioRecording()
@@ -133,14 +141,6 @@ internal class AudioCapture
                 _loopingAudioStream.WriteAsync(e.Buffer, 0, e.BytesRecorded);
             }
         };
-
-        // 录制结束后关闭文件写入器
-        _wasapiLoopbackCapture.RecordingStopped += (sender, e) =>
-        {
-            _loopingAudioStream.Dispose();
-            _loopingAudioStream = null;
-            _wasapiLoopbackCapture.Dispose();
-        };
     }
 
     private void ShowMessage(string msg)
@@ -151,10 +151,23 @@ internal class AudioCapture
 
     private void CreateFrameInputNode()
     {
-        _frameInputNode = _audioGraph.CreateFrameInputNode();
-        _frameInputNode.Stop();
-        _frameInputNode.QuantumStarted += OnFrameInputNodeQuantumStarted;
+        _loopbackInputNode = _audioGraph.CreateFrameInputNode();
+        _loopbackInputNode.Stop();
+        _loopbackInputNode.QuantumStarted += OnLoopbackInputNodeQuantumStarted;
         _readPosition = 0;
+    }
+
+    private async Task CreateFileInputNodeAsync()
+    {
+        var file = await StorageFile.GetFileFromApplicationUriAsync(new Uri("ms-appx:///Assets/emptyAudio.mp3"));
+        var result = await _audioGraph.CreateFileInputNodeAsync(file);
+        if(result.Status != AudioFileNodeCreationStatus.Success)
+        {
+            ShowMessage(result.Status.ToString());
+        }
+
+        _audioFileInputNode = result.FileInputNode;
+        _audioFileInputNode.LoopCount = null;
     }
 
     private async Task CreateDeviceInputNodeAsync()
@@ -219,7 +232,7 @@ internal class AudioCapture
         return frame;
     }
 
-    private void OnFrameInputNodeQuantumStarted(AudioFrameInputNode sender, FrameInputNodeQuantumStartedEventArgs args)
+    private void OnLoopbackInputNodeQuantumStarted(AudioFrameInputNode sender, FrameInputNodeQuantumStartedEventArgs args)
     {
         if (args.RequiredSamples == 0)
         {
@@ -250,6 +263,45 @@ internal class AudioCapture
             Marshal.Copy((IntPtr)dataInBytes, bytes, 0, (int)capacityInBytes);
             return bytes.AsBuffer();
         }
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!disposedValue)
+        {
+            Stop();
+
+            if (disposing)
+            {
+                try
+                {
+                    _stopwatch?.Stop();
+                    _audioGraph?.Dispose();
+                    _loopingAudioStream?.Dispose();
+                    _wasapiLoopbackCapture?.Dispose();
+                }
+                catch (Exception)
+                {
+                }
+            }
+
+            _audioGraph = null;
+            _loopingAudioStream = null;
+            _deviceInputNode = null;
+            _loopbackInputNode = null;
+            _frameOutputNode = null;
+            _audioFileInputNode = null;
+            _wasapiLoopbackCapture = null;
+            _stopwatch = null;
+            disposedValue = true;
+        }
+    }
+
+    public void Dispose()
+    {
+        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
     }
 }
 

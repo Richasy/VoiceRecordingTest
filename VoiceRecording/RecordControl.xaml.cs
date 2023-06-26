@@ -16,6 +16,10 @@ using Windows.Storage;
 using Windows.System;
 using Windows.UI.Popups;
 using WinRT.Interop;
+using NAudio.Utils;
+using NAudio.Wave;
+using System.IO;
+using NAudio.Lame;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -194,7 +198,7 @@ public sealed partial class RecordControl : UserControl
     {
         var folder = ApplicationData.Current.LocalFolder;
         var name = DateTime.Now.ToString("yyyyMMdd-HHmm-ss");
-        var file = await folder.CreateFileAsync($"{name}.mp4");
+        var file = await folder.CreateFileAsync($"{name}.mp4", CreationCollisionOption.ReplaceExisting);
         return file;
     }
 
