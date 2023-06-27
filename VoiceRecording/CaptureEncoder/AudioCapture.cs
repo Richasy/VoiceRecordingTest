@@ -12,6 +12,7 @@ using WinRT;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Storage.Streams;
 using Windows.Storage;
+using System.Linq;
 
 namespace VoiceRecording.CaptureEncoder;
 
@@ -23,12 +24,14 @@ internal class AudioCapture : IDisposable
     private AudioFileInputNode _audioFileInputNode;
     private AudioDeviceInputNode _deviceInputNode;
     private AudioFrameOutputNode _frameOutputNode;
+    private AudioSubmixNode _submixNode;
     private Stream _loopingAudioStream;
     private object _lockObject = new object();
     private double _readPosition = 0;
     private Stopwatch _stopwatch = new Stopwatch();
     private int _frameCount = 0;
     private bool disposedValue;
+    private bool _isStarted;
 
     public async Task InitializeAsync()
     {
@@ -48,6 +51,7 @@ internal class AudioCapture : IDisposable
         _frameOutputNode.Start();
         _stopwatch.Start();
         _wasapiLoopbackCapture?.StartRecording();
+        _isStarted = true;
     }
 
     public void Stop()
@@ -60,6 +64,7 @@ internal class AudioCapture : IDisposable
         _loopbackInputNode?.Stop();
         _frameOutputNode?.Stop();
         _audioGraph?.Stop();
+        _isStarted = false;
         // ShowMessage($"当前指针：{_readPosition}\n流的长度：{_loopingAudioStream.Length}");
     }
 
@@ -80,6 +85,27 @@ internal class AudioCapture : IDisposable
         {
             return default;
         }
+    }
+
+    public void MuteDeviceInput()
+    {
+        if (!_isStarted)
+        {
+            return;
+        }
+
+
+        _deviceInputNode.OutgoingGain = 0;
+    }
+
+    public void UnmuteDeviceInput()
+    {
+        if(!_isStarted)
+        {
+            return;
+        }
+
+        _deviceInputNode.OutgoingGain = 1;
     }
 
     public IBuffer ConvertFrameToBuffer(AudioFrame frame)
@@ -120,6 +146,7 @@ internal class AudioCapture : IDisposable
         _deviceInputNode.AddOutgoingConnection(subNode);
         _loopbackInputNode.AddOutgoingConnection(subNode);
         _audioFileInputNode.AddOutgoingConnection(subNode);
+        _submixNode = subNode;
         subNode.AddOutgoingConnection(_frameOutputNode);
     }
 

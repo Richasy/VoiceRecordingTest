@@ -57,13 +57,25 @@
                     x:Name="MainProgressBar"
                     Background="Transparent"
                     IsIndeterminate="False" />
-                <ToggleButton
+                <StackPanel
                     Margin="5"
                     HorizontalAlignment="Center"
-                    Checked="ToggleButton_Checked"
-                    Unchecked="ToggleButton_Unchecked">
-                    <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE722;" />
-                </ToggleButton>
+                    Orientation="Horizontal"
+                    Spacing="12">
+                    <ToggleButton
+                        x:Name="RecordButton"
+                        Checked="ToggleButton_Checked"
+                        Unchecked="ToggleButton_Unchecked">
+                        <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xE116;" />
+                    </ToggleButton>
+                    <ToggleButton
+                        x:Name="MuteButton"
+                        Checked="MuteButton_Checked"
+                        Unchecked="MuteButton_Unchecked">
+                        <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xF781;" />
+                    </ToggleButton>
+                </StackPanel>
+
             </StackPanel>
         </Grid>
 

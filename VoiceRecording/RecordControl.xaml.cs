@@ -180,6 +180,16 @@ public sealed partial class RecordControl : UserControl
         _encoder?.Dispose();
     }
 
+    private void MuteButton_Unchecked(object sender, RoutedEventArgs e)
+    {
+        _encoder?.ChangeMicMute(false);
+    }
+
+    private void MuteButton_Checked(object sender, RoutedEventArgs e)
+    {
+        _encoder?.ChangeMicMute(true);
+    }
+
     private async Task<StorageFile> PickVideoAsync()
     {
         var picker = new FileSavePicker();

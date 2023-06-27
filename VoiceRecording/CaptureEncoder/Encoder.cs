@@ -3,6 +3,7 @@
 
 using System;
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using VoiceRecording.CaptureEncoder;
 using Windows.Foundation;
@@ -30,6 +31,18 @@ namespace CaptureEncoder
         public IAsyncAction EncodeAsync(IRandomAccessStream stream, uint width, uint height, uint bitrateInBps, uint frameRate)
         {
             return EncodeInternalAsync(stream, width, height, bitrateInBps, frameRate).AsAsyncAction();
+        }
+
+        public void ChangeMicMute(bool mute)
+        {
+            if (mute)
+            {
+                _audioCapture.MuteDeviceInput();
+            }
+            else
+            {
+                _audioCapture.UnmuteDeviceInput();
+            }
         }
 
         private async Task EncodeInternalAsync(IRandomAccessStream stream, uint width, uint height, uint bitrateInBps, uint frameRate)
