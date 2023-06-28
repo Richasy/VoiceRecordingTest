@@ -20,6 +20,7 @@ using NAudio.Utils;
 using NAudio.Wave;
 using System.IO;
 using NAudio.Lame;
+using Windows.Win32;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -31,6 +32,7 @@ public sealed partial class RecordControl : UserControl
     public RecordControl()
     {
         this.InitializeComponent();
+        Loaded += OnLoaded;
         if (!GraphicsCaptureSession.IsSupported())
         {
             IsEnabled = false;
@@ -60,6 +62,28 @@ public sealed partial class RecordControl : UserControl
         FrameRateComboBox.SelectedIndex = frameRates.IndexOf($"{settings.FrameRate}fps");
 
         UseCaptureItemSizeCheckBox.IsChecked = settings.UseSourceSize;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        var hwnd = new Windows.Win32.Foundation.HWND(WindowNative.GetWindowHandle(App._window));
+        var hdc = PInvoke.GetDC(hwnd);
+        var dw = PInvoke.GetDeviceCaps(hdc, Windows.Win32.Graphics.Gdi.GET_DEVICE_CAPS_INDEX.HORZRES);
+        var dh = PInvoke.GetDeviceCaps(hdc, Windows.Win32.Graphics.Gdi.GET_DEVICE_CAPS_INDEX.VERTSIZE);
+        PInvoke.ReleaseDC(hwnd, hdc);
+
+        if (dw > dh)
+        {
+            dw /= dh;
+            dh = 1;
+        }
+        else
+        {
+            dh /= dw;
+            dw = 1;
+        }
+
+        Debug.WriteLine($"AspectNumerator: {dw}\n AspectDenominator: {dh}");
     }
 
     private async void ToggleButton_Checked(object sender, RoutedEventArgs e)
