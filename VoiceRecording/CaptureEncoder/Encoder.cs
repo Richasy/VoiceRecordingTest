@@ -76,7 +76,7 @@ namespace CaptureEncoder
                         await _audioCapture.InitializeAsync();
                     }
 
-                    _audioDescriptor = new AudioStreamDescriptor(_audioCapture.GetEncodingProeprties());
+                    _audioDescriptor = new AudioStreamDescriptor(_audioCapture.GetEncodingProperties());
                     _mediaStreamSource.AddStreamDescriptor(_audioDescriptor);
                     var transcode = await _transcoder.PrepareMediaStreamSourceTranscodeAsync(_mediaStreamSource, stream, encodingProfile);
                     if (transcode.CanTranscode)

@@ -46,7 +46,6 @@ internal class AudioCapture : IDisposable
         // 开始录制.
         ShowMessage("开始录制");
         _audioGraph.Start();
-        _audioFileInputNode.Start();
         _loopbackInputNode?.Start();
         _frameOutputNode.Start();
         _stopwatch.Start();
@@ -60,7 +59,6 @@ internal class AudioCapture : IDisposable
         ShowMessage("录制结束");
         var duration = _stopwatch.Elapsed.TotalSeconds;
         ShowMessage($"总计音频帧数：{_frameCount}\n用时：{duration:0.0}s\n频率：{_frameCount / duration}");
-        _audioFileInputNode?.Stop();
         _loopbackInputNode?.Stop();
         _frameOutputNode?.Stop();
         _audioGraph?.Stop();
@@ -68,7 +66,7 @@ internal class AudioCapture : IDisposable
         // ShowMessage($"当前指针：{_readPosition}\n流的长度：{_loopingAudioStream.Length}");
     }
 
-    public AudioEncodingProperties GetEncodingProeprties()
+    public AudioEncodingProperties GetEncodingProperties()
         => _audioGraph.EncodingProperties;
 
     public AudioFrame GetAudioFrame()
@@ -131,9 +129,9 @@ internal class AudioCapture : IDisposable
         }
 
         _audioGraph = result.Graph;
+        await CreateFileInputNodeAsync();
         CreateFrameOutputNode();
         await CreateDeviceInputNodeAsync();
-        await CreateFileInputNodeAsync();
         CreateFrameInputNode();
 
         if (_frameOutputNode == null || _deviceInputNode == null)
@@ -143,9 +141,9 @@ internal class AudioCapture : IDisposable
 
 
         var subNode = _audioGraph.CreateSubmixNode();
+        _audioFileInputNode.AddOutgoingConnection(subNode);
         _deviceInputNode.AddOutgoingConnection(subNode);
         _loopbackInputNode.AddOutgoingConnection(subNode);
-        _audioFileInputNode.AddOutgoingConnection(subNode);
         _submixNode = subNode;
         subNode.AddOutgoingConnection(_frameOutputNode);
     }
@@ -153,6 +151,7 @@ internal class AudioCapture : IDisposable
     private void InitializeAudioRecording()
     {
         _wasapiLoopbackCapture = new WasapiLoopbackCapture();
+        _wasapiLoopbackCapture.ShareMode = NAudio.CoreAudioApi.AudioClientShareMode.Exclusive;
 
         // 设置音频输入设备的格式
         var waveFormat = _wasapiLoopbackCapture.WaveFormat;
@@ -164,6 +163,7 @@ internal class AudioCapture : IDisposable
         {
             lock (_lockObject)
             {
+                Debug.WriteLine($"录制音频数据：{e.BytesRecorded}");
                 _loopingAudioStream.Seek(0, SeekOrigin.End);
                 _loopingAudioStream.WriteAsync(e.Buffer, 0, e.BytesRecorded);
             }
