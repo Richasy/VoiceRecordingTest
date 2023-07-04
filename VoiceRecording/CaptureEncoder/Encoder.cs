@@ -127,7 +127,7 @@ namespace CaptureEncoder
             _transcoder.HardwareAccelerationEnabled = true;
         }
 
-        private void OnMediaStreamSourceSampleRequested(MediaStreamSource sender, MediaStreamSourceSampleRequestedEventArgs args)
+        private async void OnMediaStreamSourceSampleRequested(MediaStreamSource sender, MediaStreamSourceSampleRequestedEventArgs args)
         {
             if (_isRecording && !_closed)
             {
@@ -137,9 +137,17 @@ namespace CaptureEncoder
                     if (!_isVideoStreaming)
                     {
                         var def = args.Request.GetDeferral();
+
                         var frame = _audioCapture.GetAudioFrame();
-                        if (frame == null || frame.Duration.GetValueOrDefault().TotalSeconds == 0)
+                        var count = 0;
+                        while (count++ <= 5 && (frame == null || frame.Duration.GetValueOrDefault().TotalSeconds == 0))
                         {
+                            await Task.Delay(10);
+                            frame = _audioCapture.GetAudioFrame();
+                        }
+                        if (count >= 5)
+                        {
+                            OutputDebugString("No audio frame");
                             args.Request.Sample = null;
                             return;
                         }
@@ -147,6 +155,7 @@ namespace CaptureEncoder
                         var buffer = _audioCapture.ConvertFrameToBuffer(frame);
                         if (buffer == null)
                         {
+                            OutputDebugString("No audio buffer");
                             return;
                         }
 
@@ -155,6 +164,7 @@ namespace CaptureEncoder
                         sample.Duration = frame.Duration.GetValueOrDefault();
                         sample.KeyFrame = true;
                         args.Request.Sample = sample;
+                        OutputDebugString($"Audio frame {sample.Timestamp} {sample.Duration}");
                         def.Complete();
                     }
                     else
@@ -172,6 +182,8 @@ namespace CaptureEncoder
 
                             var sample = MediaStreamSample.CreateFromDirect3D11Surface(frame.Surface, timeStamp);
                             args.Request.Sample = sample;
+
+                            OutputDebugString($"Video frame {sample.Timestamp} {sample.Duration}");
                         }
                     }
                 }
@@ -189,6 +201,13 @@ namespace CaptureEncoder
                 args.Request.Sample = null;
                 DisposeInternal();
             }
+        }
+
+        public static string output = "";
+        public static void OutputDebugString(string s)
+        {
+            output += s;
+            //Debug.WriteLine(s);
         }
 
         private void OnMediaStreamSourceStarting(MediaStreamSource sender, MediaStreamSourceStartingEventArgs args)
