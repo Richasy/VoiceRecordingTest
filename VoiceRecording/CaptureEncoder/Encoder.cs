@@ -68,7 +68,7 @@ namespace CaptureEncoder
                     encodingProfile.Video.FrameRate.Denominator = 1;
                     encodingProfile.Video.PixelAspectRatio.Numerator = 1;
                     encodingProfile.Video.PixelAspectRatio.Denominator = 1;
-                    encodingProfile.Audio = MediaEncodingProfile.CreateMp3(AudioEncodingQuality.Auto).Audio;
+                    encodingProfile.Audio = MediaEncodingProfile.CreateMp3(AudioEncodingQuality.High).Audio;
 
                     if (_audioCapture == null)
                     {
@@ -131,28 +131,30 @@ namespace CaptureEncoder
         {
             if (_isRecording && !_closed)
             {
+                var def = args.Request.GetDeferral();
                 try
                 {
                     _isVideoStreaming = args.Request.StreamDescriptor is VideoStreamDescriptor;
                     if (!_isVideoStreaming)
                     {
-                        var def = args.Request.GetDeferral();
                         var frame = _audioCapture.GetAudioFrame();
-                        if (frame == null || frame.Duration.GetValueOrDefault().TotalSeconds == 0)
+                        if (frame == null)
                         {
                             args.Request.Sample = null;
+                            def.Complete();
                             return;
                         }
 
                         var buffer = _audioCapture.ConvertFrameToBuffer(frame);
                         if (buffer == null)
                         {
+                            args.Request.Sample = null;
+                            def.Complete();
                             return;
                         }
 
                         var timeStamp = frame.RelativeTime.GetValueOrDefault();
                         var sample = MediaStreamSample.CreateFromBuffer(buffer, timeStamp);
-                        sample.Duration = frame.Duration.GetValueOrDefault();
                         sample.KeyFrame = true;
                         args.Request.Sample = sample;
                         def.Complete();
@@ -164,6 +166,7 @@ namespace CaptureEncoder
                             if (frame == null)
                             {
                                 args.Request.Sample = null;
+                                def.Complete();
                                 DisposeInternal();
                                 return;
                             }
@@ -183,6 +186,8 @@ namespace CaptureEncoder
                     args.Request.Sample = null;
                     DisposeInternal();
                 }
+
+                def.Complete();
             }
             else
             {

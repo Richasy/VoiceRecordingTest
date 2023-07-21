@@ -45,11 +45,9 @@ internal class AudioCapture : IDisposable
     {
         // 开始录制.
         ShowMessage("开始录制");
-        _audioGraph.Start();
-        _loopbackInputNode?.Start();
-        _frameOutputNode.Start();
-        _stopwatch.Start();
         _wasapiLoopbackCapture?.StartRecording();
+        _audioGraph.Start();
+        _stopwatch.Start();
         _isStarted = true;
     }
 
@@ -59,9 +57,8 @@ internal class AudioCapture : IDisposable
         ShowMessage("录制结束");
         var duration = _stopwatch.Elapsed.TotalSeconds;
         ShowMessage($"总计音频帧数：{_frameCount}\n用时：{duration:0.0}s\n频率：{_frameCount / duration}");
-        _loopbackInputNode?.Stop();
-        _frameOutputNode?.Stop();
         _audioGraph?.Stop();
+        _wasapiLoopbackCapture?.StopRecording();
         _isStarted = false;
         // ShowMessage($"当前指针：{_readPosition}\n流的长度：{_loopingAudioStream.Length}");
     }
@@ -74,9 +71,6 @@ internal class AudioCapture : IDisposable
         try
         {
             var frame = _frameOutputNode.GetFrame();
-            var ts = Stopwatch.GetTimestamp();
-            ts = ts * TimeSpan.TicksPerSecond / Stopwatch.Frequency;
-            frame.SystemRelativeTime = new TimeSpan(ts);
             return frame;
         }
         catch (Exception)
@@ -126,13 +120,14 @@ internal class AudioCapture : IDisposable
         if (result.Status != AudioGraphCreationStatus.Success)
         {
             ShowMessage("AudioGraph creation error: " + result.Status.ToString());
+            return;
         }
 
         _audioGraph = result.Graph;
         await CreateFileInputNodeAsync();
         CreateFrameOutputNode();
         await CreateDeviceInputNodeAsync();
-        CreateFrameInputNode();
+        CreateLoopbackFrameInputNode();
 
         if (_frameOutputNode == null || _deviceInputNode == null)
         {
@@ -151,7 +146,7 @@ internal class AudioCapture : IDisposable
     private void InitializeAudioRecording()
     {
         _wasapiLoopbackCapture = new WasapiLoopbackCapture();
-        _wasapiLoopbackCapture.ShareMode = NAudio.CoreAudioApi.AudioClientShareMode.Exclusive;
+        _wasapiLoopbackCapture.ShareMode = NAudio.CoreAudioApi.AudioClientShareMode.Shared;
 
         // 设置音频输入设备的格式
         var waveFormat = _wasapiLoopbackCapture.WaveFormat;
@@ -176,10 +171,9 @@ internal class AudioCapture : IDisposable
         Debug.WriteLine(msg);
     }
 
-    private void CreateFrameInputNode()
+    private void CreateLoopbackFrameInputNode()
     {
         _loopbackInputNode = _audioGraph.CreateFrameInputNode();
-        _loopbackInputNode.Stop();
         _loopbackInputNode.QuantumStarted += OnLoopbackInputNodeQuantumStarted;
         _readPosition = 0;
     }
@@ -191,6 +185,7 @@ internal class AudioCapture : IDisposable
         if(result.Status != AudioFileNodeCreationStatus.Success)
         {
             ShowMessage(result.Status.ToString());
+            return;
         }
 
         _audioFileInputNode = result.FileInputNode;
@@ -217,7 +212,7 @@ internal class AudioCapture : IDisposable
 
     unsafe private AudioFrame GenerateAudioData(uint samples)
     {
-        uint bufferSize = _audioGraph.EncodingProperties.SampleRate;
+        uint bufferSize = samples * (_loopbackInputNode.EncodingProperties.BitsPerSample / 8) * _loopbackInputNode.EncodingProperties.ChannelCount;
         // Buffer size is (number of samples) * (size of each sample)
         // We choose to generate single channel (mono) audio. For multi-channel, multiply by number of channels
         AudioFrame frame = new AudioFrame(bufferSize);
@@ -233,7 +228,7 @@ internal class AudioCapture : IDisposable
             uint capacityInBytes;
 
             // Get the buffer from the AudioFrame
-            (reference.As<IMemoryBufferByteAccess>()).GetBuffer(out dataInBytes, out capacityInBytes);
+            reference.As<IMemoryBufferByteAccess>().GetBuffer(out dataInBytes, out capacityInBytes);
 
             if (_loopingAudioStream.Length < _readPosition + bufferSize)
             {
@@ -255,6 +250,32 @@ internal class AudioCapture : IDisposable
             }
         }
 
+
+        return frame;
+    }
+
+    unsafe private Windows.Media.AudioFrame GenerateTestEmptyAudioData(uint samples)
+    {
+        // 缓冲区大小是 (采样数) * (每个采样的字节数) * (通道数)
+        uint bufferSize = samples * sizeof(float) * _audioGraph.EncodingProperties.ChannelCount;
+
+        // 创建一个新的 AudioFrame 对象
+        var frame = new Windows.Media.AudioFrame(bufferSize);
+
+        // 获取缓冲区的指针
+        using (AudioBuffer buffer = frame.LockBuffer(AudioBufferAccessMode.Write))
+        using (IMemoryBufferReference reference = buffer.CreateReference())
+        {
+            byte* dataInBytes;
+            uint capacityInBytes;
+            reference.As<IMemoryBufferByteAccess>().GetBuffer(out dataInBytes, out capacityInBytes);
+
+            // 将缓冲区清零
+            for (int i = 0; i < capacityInBytes; i++)
+            {
+                dataInBytes[i] = 0;
+            }
+        }
 
         return frame;
     }
@@ -285,7 +306,7 @@ internal class AudioCapture : IDisposable
             uint capacityInBytes;
 
             // Get the buffer from the AudioFrame
-            (reference.As<IMemoryBufferByteAccess>()).GetBuffer(out dataInBytes, out capacityInBytes);
+            reference.As<IMemoryBufferByteAccess>().GetBuffer(out dataInBytes, out capacityInBytes);
             var bytes = new byte[capacityInBytes];
             Marshal.Copy((IntPtr)dataInBytes, bytes, 0, (int)capacityInBytes);
             return bytes.AsBuffer();
