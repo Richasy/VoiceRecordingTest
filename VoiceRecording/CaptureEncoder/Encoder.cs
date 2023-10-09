@@ -2,18 +2,22 @@
 // Licensed under the MIT License.
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
-using System.Security.Cryptography;
+using System.Drawing;
+using System.IO;
+using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using VoiceRecording.CaptureEncoder;
 using Windows.Foundation;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX.Direct3D11;
 using Windows.Media.Core;
-using Windows.Media.Editing;
 using Windows.Media.MediaProperties;
 using Windows.Media.Transcoding;
+using Windows.Storage;
 using Windows.Storage.Streams;
+using Windows.System;
 
 namespace CaptureEncoder
 {
@@ -31,6 +35,70 @@ namespace CaptureEncoder
         public IAsyncAction EncodeAsync(IRandomAccessStream stream, uint width, uint height, uint bitrateInBps, uint frameRate)
         {
             return EncodeInternalAsync(stream, width, height, bitrateInBps, frameRate).AsAsyncAction();
+        }
+
+        public IAsyncAction GenerateGifAsync()
+        {
+            return GenerateGifInternalAsync().AsAsyncAction();
+        }
+
+        private async Task GenerateGifInternalAsync()
+        {
+            var outputFile = await ApplicationData.Current.TemporaryFolder.CreateFileAsync("test.gif", CreationCollisionOption.ReplaceExisting);
+
+            using (var stream = new MemoryStream())
+            using (var encoder = new GifEncoder(stream, default, default, 0))
+            {
+                // Set the frame rate to 24 fps and the loop count to 0 (infinite)
+                var frameDelay = 1000 / 24; // in milliseconds
+
+                var index = 0;
+
+                var duration = (_lastTime - _startTime).TotalMilliseconds;
+                var timesFromStart = new List<TimeSpan>();
+                for (var timeCode = 0; timeCode < duration; timeCode += frameDelay)
+                {
+                    timesFromStart.Add(TimeSpan.FromMilliseconds(timeCode));
+                }
+
+                // Loop through the SoftwareBitmap objects and add them to the encoder
+                foreach (var time in timesFromStart)
+                {
+                    var bitmap = GetClosestBitmap(time);
+                    Debug.WriteLine($"Frame {index + 1} of {_videoFrames.Count}");
+
+                    try
+                    {
+                        encoder.AddFrame(bitmap, 0, 0, TimeSpan.FromMilliseconds(frameDelay));
+                        bitmap.Dispose();
+                    }
+                    catch (Exception)
+                    {
+                        Debug.WriteLine($"Failed to encode frame {index + 1} of {_videoFrames.Count}");
+                    }
+
+
+                    index++;
+                }
+
+                stream.Position = 0;
+                await FileIO.WriteBufferAsync(outputFile, stream.ToArray().AsBuffer());
+                await Launcher.LaunchFileAsync(outputFile);
+            }
+        }
+
+        private Bitmap GetClosestBitmap(TimeSpan targetTimeSpan)
+        {
+            TimeSpan closestTimeSpan = TimeSpan.MaxValue;
+            foreach (TimeSpan timeSpan in _videoFrames.Keys)
+            {
+                if (Math.Abs((timeSpan - targetTimeSpan).Ticks) < Math.Abs((closestTimeSpan - targetTimeSpan).Ticks))
+                {
+                    closestTimeSpan = timeSpan;
+                }
+            }
+
+            return _videoFrames[closestTimeSpan];
         }
 
         public void ChangeMicMute(bool mute)
@@ -70,14 +138,14 @@ namespace CaptureEncoder
                     encodingProfile.Video.PixelAspectRatio.Denominator = 1;
                     encodingProfile.Audio = MediaEncodingProfile.CreateMp3(AudioEncodingQuality.High).Audio;
 
-                    if (_audioCapture == null)
-                    {
-                        _audioCapture = new AudioCapture();
-                        await _audioCapture.InitializeAsync();
-                    }
+                    //if (_audioCapture == null)
+                    //{
+                    //    _audioCapture = new AudioCapture();
+                    //    await _audioCapture.InitializeAsync();
+                    //}
 
-                    _audioDescriptor = new AudioStreamDescriptor(_audioCapture.GetEncodingProperties());
-                    _mediaStreamSource.AddStreamDescriptor(_audioDescriptor);
+                    //_audioDescriptor = new AudioStreamDescriptor(_audioCapture.GetEncodingProperties());
+                    //_mediaStreamSource.AddStreamDescriptor(_audioDescriptor);
                     var transcode = await _transcoder.PrepareMediaStreamSourceTranscodeAsync(_mediaStreamSource, stream, encodingProfile);
                     if (transcode.CanTranscode)
                     {
@@ -172,8 +240,10 @@ namespace CaptureEncoder
                             }
 
                             var timeStamp = frame.SystemRelativeTime - _timeOffset;
+                            _lastTime = frame.SystemRelativeTime;
 
                             var sample = MediaStreamSample.CreateFromDirect3D11Surface(frame.Surface, timeStamp);
+                            _videoFrames.Add(timeStamp, frame.Bitmap);
                             args.Request.Sample = sample;
                         }
                     }
@@ -204,6 +274,7 @@ namespace CaptureEncoder
                 {
                     // args.Request.SetActualStartPosition(frame.SystemRelativeTime);
                     _timeOffset = frame.SystemRelativeTime;
+                    _startTime = frame.SystemRelativeTime;
                 }
 
                 if (_audioCapture != null)
@@ -232,5 +303,9 @@ namespace CaptureEncoder
         private bool _isRecording;
         private bool _isVideoStreaming;
         private bool _closed = false;
+
+        private Dictionary<TimeSpan, Bitmap> _videoFrames = new Dictionary<TimeSpan, Bitmap>();
+        private TimeSpan _startTime;
+        private TimeSpan _lastTime;
     }
 }

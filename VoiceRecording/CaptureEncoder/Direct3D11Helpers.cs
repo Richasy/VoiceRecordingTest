@@ -1,11 +1,20 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.UI.Xaml.Media.Imaging;
+using SharpDX.Direct3D11;
+using SharpDX.DXGI;
+using SharpDX;
 using System;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using Windows.Graphics.DirectX;
 using Windows.Graphics.DirectX.Direct3D11;
 using WinRT;
+using NAudio.CoreAudioApi;
+using static SharpDX.Utilities;
+using System.IO;
 
 namespace CaptureEncoder
 {
@@ -73,23 +82,73 @@ namespace CaptureEncoder
             return device;
         }
 
-        internal static IDirect3DSurface CreateDirect3DSurfaceFromSharpDXTexture(SharpDX.Direct3D11.Texture2D texture)
+        internal static (IDirect3DSurface, Bitmap) CreateDirect3DSurfaceFromSharpDXTexture(SharpDX.Direct3D11.Texture2D texture)
         {
             IDirect3DSurface surface = null;
+            Bitmap bitmap = null;
 
             // Acquire the DXGI interface for the Direct3D surface.
             using (var dxgiSurface = texture.QueryInterface<SharpDX.DXGI.Surface>())
             {
                 // Wrap the native device using a WinRT interop object.
                 uint hr = CreateDirect3D11SurfaceFromDXGISurface(dxgiSurface.NativePointer, out IntPtr pUnknown);
-
                 if (hr == 0)
                 {
-                    surface = WinRT.MarshalInterface<IDirect3DSurface>.FromAbi(pUnknown);
+                    surface = MarshalInterface<IDirect3DSurface>.FromAbi(pUnknown);
+
+                    var desc = texture.Description;
+                    // 创建一个StagingTexture
+                    var stagingTexture = new Texture2D(
+                        texture.Device,
+                        new Texture2DDescription
+                        {
+                            Width = desc.Width,
+                            Height = desc.Height,
+                            MipLevels = 1,
+                            ArraySize = 1,
+                            Format = desc.Format,
+                            SampleDescription = new SampleDescription(1, 0),
+                            Usage = ResourceUsage.Staging,
+                            BindFlags = BindFlags.None,
+                            CpuAccessFlags = CpuAccessFlags.Read,
+                            OptionFlags = ResourceOptionFlags.None
+                        });
+
+                    // 将Texture2D复制到StagingTexture
+                    texture.Device.ImmediateContext.CopyResource(texture, stagingTexture);
+
+                    bitmap = new Bitmap(stagingTexture.Description.Width, stagingTexture.Description.Height, PixelFormat.Format32bppArgb);
+                    var boundsRect = new Rectangle(0, 0, stagingTexture.Description.Width, stagingTexture.Description.Height);
+                    var mapSource = stagingTexture.Device.ImmediateContext.MapSubresource(stagingTexture, 0, MapMode.Read, SharpDX.Direct3D11.MapFlags.None);
+
+                    // Copy pixels from screen capture Texture to GDI bitmap
+                    var mapDest = bitmap.LockBits(boundsRect, ImageLockMode.WriteOnly, bitmap.PixelFormat);
+
+                    var sourcePtr = mapSource.DataPointer;
+                    var destPtr = mapDest.Scan0;
+                    for (int y = 0; y < stagingTexture.Description.Height; y++)
+                    {
+                        // Copy a single line 
+                        Utilities.CopyMemory(destPtr, sourcePtr, stagingTexture.Description.Width * 4);
+
+                        // Advance pointers
+                        sourcePtr = IntPtr.Add(sourcePtr, mapSource.RowPitch);
+                        destPtr = IntPtr.Add(destPtr, mapDest.Stride);
+                    }
+
+                    // Release source and dest locks
+                    bitmap.UnlockBits(mapDest);
+                    stagingTexture.Device.ImmediateContext.UnmapSubresource(stagingTexture, 0);
+
+                    using var ms = new MemoryStream();
+                    bitmap.Save(ms, ImageFormat.Png);
+
+                    Marshal.Release(pUnknown);
                 }
             }
 
-            return surface;
+
+            return (surface, bitmap);
         }
 
         internal static SharpDX.Direct3D11.Device CreateSharpDXDevice(IDirect3DDevice device)

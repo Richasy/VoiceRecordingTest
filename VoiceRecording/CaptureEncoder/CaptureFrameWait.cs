@@ -3,6 +3,7 @@
 
 using System;
 using System.Diagnostics;
+using System.Drawing;
 using System.Threading;
 using Windows.Foundation.Metadata;
 using Windows.Graphics;
@@ -16,6 +17,7 @@ namespace CaptureEncoder
     {
         public IDirect3DSurface Surface { get; internal set; }
         public TimeSpan SystemRelativeTime { get; internal set; }
+        public Bitmap Bitmap { get; internal set; }
 
         public void Dispose()
         {
@@ -171,7 +173,9 @@ namespace CaptureEncoder
 
                     _d3dDevice.ImmediateContext.CopyResource(_blankTexture, copyTexture);
                     _d3dDevice.ImmediateContext.CopySubresourceRegion(sourceTexture, 0, region, copyTexture, 0);
-                    result.Surface = Direct3D11Helpers.CreateDirect3DSurfaceFromSharpDXTexture(copyTexture);
+                    var data = Direct3D11Helpers.CreateDirect3DSurfaceFromSharpDXTexture(copyTexture);
+                    result.Surface = data.Item1;
+                    result.Bitmap = data.Item2;
                 }
             }
 

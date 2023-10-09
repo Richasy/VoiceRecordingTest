@@ -143,6 +143,8 @@ public sealed partial class RecordControl : UserControl
                     stream,
                     width, height, bitrate,
                     frameRate);
+
+                await _encoder.GenerateGifAsync();
             }
             MainTextBlock.Foreground = originalBrush;
         }
@@ -175,27 +177,27 @@ public sealed partial class RecordControl : UserControl
         MainTextBlock.Text = "saving...";
 
         // Ask the user where they'd like the video to live
-        var newFile = await PickVideoAsync();
-        if (newFile == null)
-        {
-            // User decided they didn't want it
-            // Throw out the encoded video
-            button.IsChecked = false;
-            MainTextBlock.Text = "canceled";
-            MainProgressBar.IsIndeterminate = false;
-            await file.DeleteAsync();
-            return;
-        }
-        // Move our vidoe to its new home
-        await file.MoveAndReplaceAsync(newFile);
+        //var newFile = await PickVideoAsync();
+        //if (newFile == null)
+        //{
+        //    // User decided they didn't want it
+        //    // Throw out the encoded video
+        //    button.IsChecked = false;
+        //    MainTextBlock.Text = "canceled";
+        //    MainProgressBar.IsIndeterminate = false;
+        //    await file.DeleteAsync();
+        //    return;
+        //}
+        //// Move our vidoe to its new home
+        //await file.MoveAndReplaceAsync(newFile);
 
         // Tell the user we're done
         button.IsChecked = false;
         MainTextBlock.Text = "done";
         MainProgressBar.IsIndeterminate = false;
 
-        // Open the final product
-        await Launcher.LaunchFileAsync(newFile);
+        //// Open the final product
+        //await Launcher.LaunchFileAsync(newFile);
     }
 
     private void ToggleButton_Unchecked(object sender, RoutedEventArgs e)
