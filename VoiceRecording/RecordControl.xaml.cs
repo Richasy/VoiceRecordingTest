@@ -128,7 +128,7 @@ public sealed partial class RecordControl : UserControl
         var file = await GetTempFileAsync();
 
         // Tell the user we've started recording
-        MainTextBlock.Text = "¡ñ rec";
+        MainTextBlock.Text = "Recording";
         var originalBrush = MainTextBlock.Foreground;
         MainTextBlock.Foreground = new SolidColorBrush(Colors.Red);
         MainProgressBar.IsIndeterminate = true;
